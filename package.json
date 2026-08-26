@@ -1,0 +1,35 @@
+{
+  "name": "opencode-keepalive",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that keeps macOS awake while an agent session is running",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "plugin",
+    "caffeinate",
+    "macos"
+  ],
+  "author": "Tim Hildebrandt <44113468+tim-hilde@users.noreply.github.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "os": [
+    "darwin"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.0",
+    "@types/bun": "^1.4.0",
+    "@types/node": "^25.6.0",
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}
