@@ -1,4 +1,4 @@
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode/plugin";
 import { createCaffeinateAcquirer, type Logger } from "./caffeinate.ts";
 import { createKeepalive, type KeepaliveEvent } from "./keepalive.ts";
 
@@ -12,18 +12,23 @@ const keepalive = createKeepalive({
   }),
 });
 
-export const OpencodeKeepalive: Plugin = async (input: PluginInput) => {
-  log = (level, message) => {
-    void input.client.app.log({
-      body: { service: "opencode-keepalive", level, message },
-    });
-  };
+export default Plugin.define({
+  id: "opencode-keepalive",
+  setup(ctx) {
+    log = (level, message) => {
+      if (level === "warn") console.warn(`[opencode-keepalive] ${message}`);
+      else console.debug(`[opencode-keepalive] ${message}`);
+    };
 
-  return {
-    event: async ({ event }) => {
-      keepalive.handleEvent(event as unknown as KeepaliveEvent);
-    },
-  };
-};
+    const controller = new AbortController();
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        keepalive.handleEvent(event as unknown as KeepaliveEvent);
+      }
+    })();
 
-export default OpencodeKeepalive;
+    return () => {
+      controller.abort();
+    };
+  },
+});

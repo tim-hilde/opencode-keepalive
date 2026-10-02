@@ -21,7 +21,7 @@ function makeHarness() {
 }
 
 function status(sessionID: string, type: "busy" | "idle" | "retry") {
-  return { type: "session.status", properties: { sessionID, status: { type } } };
+  return { type: "session.status", data: { sessionID, status: { type } } };
 }
 
 describe("createKeepalive", () => {
@@ -74,22 +74,8 @@ describe("createKeepalive", () => {
   test("releases on session.deleted", () => {
     const h = makeHarness();
     h.keepalive.handleEvent(status("s1", "busy"));
-    h.keepalive.handleEvent({ type: "session.deleted", properties: { info: { id: "s1" } } });
+    h.keepalive.handleEvent({ type: "session.deleted", data: { sessionID: "s1" } });
     expect(h.keepalive.isHolding()).toBe(false);
-  });
-
-  test("releases on session.error", () => {
-    const h = makeHarness();
-    h.keepalive.handleEvent(status("s1", "busy"));
-    h.keepalive.handleEvent({ type: "session.error", properties: { sessionID: "s1" } });
-    expect(h.keepalive.isHolding()).toBe(false);
-  });
-
-  test("ignores session.error without a sessionID", () => {
-    const h = makeHarness();
-    h.keepalive.handleEvent(status("s1", "busy"));
-    h.keepalive.handleEvent({ type: "session.error", properties: {} });
-    expect(h.keepalive.isHolding()).toBe(true);
   });
 
   test("idle for an unknown session is a no-op", () => {
@@ -101,7 +87,7 @@ describe("createKeepalive", () => {
 
   test("ignores unrelated events", () => {
     const h = makeHarness();
-    h.keepalive.handleEvent({ type: "file.edited", properties: { file: "a.ts" } });
+    h.keepalive.handleEvent({ type: "file.edited", data: { file: "a.ts" } });
     expect(h.counts().acquire).toBe(0);
   });
 

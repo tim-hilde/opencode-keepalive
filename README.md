@@ -29,7 +29,7 @@ Clone the repo, then reference the directory in `~/.config/opencode/opencode.jso
 
 ```json
 {
-  "plugin": ["/absolute/path/to/opencode-keepalive"]
+  "plugins": ["/absolute/path/to/opencode-keepalive"]
 }
 ```
 

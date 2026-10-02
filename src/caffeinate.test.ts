@@ -30,7 +30,7 @@ describe("caffeinate integration", () => {
 
     keepalive.handleEvent({
       type: "session.status",
-      properties: { sessionID: "s1", status: { type: "busy" } },
+      data: { sessionID: "s1", status: { type: "busy" } },
     });
     await sleep(700);
 
@@ -40,7 +40,7 @@ describe("caffeinate integration", () => {
 
     keepalive.handleEvent({
       type: "session.status",
-      properties: { sessionID: "s1", status: { type: "idle" } },
+      data: { sessionID: "s1", status: { type: "idle" } },
     });
     await sleep(700);
 
