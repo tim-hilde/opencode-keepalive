@@ -17,30 +17,41 @@ export type Keepalive = {
   activeCount: () => number;
 };
 
-const ACTIVE_STATUS = new Set(["busy", "retry"]);
+const SESSION_ENDED = new Set([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.deleted",
+]);
 
-function readSessionID(data: Record<string, unknown> | undefined): string | undefined {
-  const value = data?.["sessionID"];
+const SHELL_ENDED = new Set(["shell.exited", "shell.deleted"]);
+
+function field(record: unknown, key: string): unknown {
+  if (typeof record !== "object" || record === null) return undefined;
+  return (record as Record<string, unknown>)[key];
+}
+
+function stringField(record: unknown, key: string): string | undefined {
+  const value = field(record, key);
   return typeof value === "string" ? value : undefined;
 }
 
-function readStatusType(data: Record<string, unknown> | undefined): string | undefined {
-  const status = data?.["status"];
-  if (typeof status !== "object" || status === null) return undefined;
-  const type = (status as Record<string, unknown>)["type"];
-  return typeof type === "string" ? type : undefined;
-}
-
 export function createKeepalive(deps: KeepaliveDeps): Keepalive {
-  const active = new Set<string>();
+  const sessions = new Set<string>();
+  // V2 ends a session's execution while its background shells keep running.
+  const shells = new Set<string>();
   let lock: WakeLock | null = null;
 
+  function activeCount(): number {
+    return sessions.size + shells.size;
+  }
+
   function sync(): void {
-    if (active.size > 0 && lock === null) {
+    if (activeCount() > 0 && lock === null) {
       lock = deps.acquire();
       return;
     }
-    if (active.size === 0 && lock !== null) {
+    if (activeCount() === 0 && lock !== null) {
       lock.release();
       lock = null;
     }
@@ -49,20 +60,29 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
   function handleEvent(event: KeepaliveEvent): void {
     const { type, data } = event;
 
-    if (type === "session.status") {
-      const sessionID = readSessionID(data);
-      const statusType = readStatusType(data);
-      if (sessionID === undefined || statusType === undefined) return;
-      if (ACTIVE_STATUS.has(statusType)) active.add(sessionID);
-      else active.delete(sessionID);
+    if (type === "session.execution.started" || SESSION_ENDED.has(type)) {
+      const sessionID = stringField(data, "sessionID");
+      if (sessionID === undefined) return;
+      if (type === "session.execution.started") sessions.add(sessionID);
+      else sessions.delete(sessionID);
       sync();
       return;
     }
 
-    if (type === "session.deleted") {
-      const sessionID = readSessionID(data);
-      if (sessionID === undefined) return;
-      active.delete(sessionID);
+    if (type === "shell.created") {
+      const info = field(data, "info");
+      const id = stringField(info, "id");
+      const sessionID = stringField(field(info, "metadata"), "sessionID");
+      if (id === undefined || sessionID === undefined) return;
+      shells.add(id);
+      sync();
+      return;
+    }
+
+    if (SHELL_ENDED.has(type)) {
+      const id = stringField(data, "id");
+      if (id === undefined) return;
+      shells.delete(id);
       sync();
     }
   }
@@ -70,6 +90,6 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
   return {
     handleEvent,
     isHolding: () => lock !== null,
-    activeCount: () => active.size,
+    activeCount,
   };
 }

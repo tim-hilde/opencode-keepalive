@@ -24,24 +24,18 @@ function assertionHeld(): boolean {
 }
 
 describe("caffeinate integration", () => {
-  test("holds a real power assertion while a session is busy", async () => {
+  test("holds a real power assertion while a session is running", async () => {
     const before = runningCaffeinatePids();
     const keepalive = createKeepalive({ acquire: createCaffeinateAcquirer(() => {}) });
 
-    keepalive.handleEvent({
-      type: "session.status",
-      data: { sessionID: "s1", status: { type: "busy" } },
-    });
+    keepalive.handleEvent({ type: "session.execution.started", data: { sessionID: "s1" } });
     await sleep(700);
 
     expect(keepalive.isHolding()).toBe(true);
     expect(runningCaffeinatePids().length).toBe(before.length + 1);
     expect(assertionHeld()).toBe(true);
 
-    keepalive.handleEvent({
-      type: "session.status",
-      data: { sessionID: "s1", status: { type: "idle" } },
-    });
+    keepalive.handleEvent({ type: "session.execution.succeeded", data: { sessionID: "s1" } });
     await sleep(700);
 
     expect(keepalive.isHolding()).toBe(false);

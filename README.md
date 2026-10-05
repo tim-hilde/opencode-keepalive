@@ -4,10 +4,17 @@ Keeps macOS awake while an OpenCode agent session is running.
 
 ## How it works
 
-While any session reports `busy` or `retry`, the plugin holds a
-`caffeinate -i -m -w <opencode pid>` process: the system and disk are kept from
-idle-sleeping, while the display sleeps on its normal schedule. Once every
-session is idle again, the process is killed and the assertion released.
+While any session execution is running (`session.execution.started` until
+`succeeded`, `failed` or `interrupted`) or an agent's background shell is still
+running, the plugin holds a `caffeinate -i -m -w <opencode pid>` process: the
+system and disk are kept from idle-sleeping, while the display sleeps on its
+normal schedule. Once nothing is running, the process is killed and the
+assertion released.
+
+Background shells count because OpenCode ends the execution as soon as the
+agent's turn ends, even while a shell it started (a long test run, say) keeps
+going. A long-lived background process such as a dev server therefore keeps the
+machine awake until it exits.
 
 The `-w <pid>` flag makes `caffeinate` watch the OpenCode process, so the
 assertion is released even if OpenCode is force-killed and no cleanup handler
