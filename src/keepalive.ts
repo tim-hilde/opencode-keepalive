@@ -2,8 +2,12 @@ export type WakeLock = {
   release: () => void;
 };
 
+export type Schedule = (fn: () => void, ms: number) => () => void;
+
 export type KeepaliveDeps = {
   acquire: () => WakeLock | null;
+  graceMs: number;
+  schedule?: Schedule;
 };
 
 export type KeepaliveEvent = {
@@ -36,24 +40,39 @@ function stringField(record: unknown, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+const scheduleUnref: Schedule = (fn, ms) => {
+  const timer = setTimeout(fn, ms);
+  timer.unref();
+  return () => clearTimeout(timer);
+};
+
 export function createKeepalive(deps: KeepaliveDeps): Keepalive {
+  const schedule = deps.schedule ?? scheduleUnref;
   const sessions = new Set<string>();
   // V2 ends a session's execution while its background shells keep running.
   const shells = new Set<string>();
   let lock: WakeLock | null = null;
+  let cancelRelease: (() => void) | null = null;
 
   function activeCount(): number {
     return sessions.size + shells.size;
   }
 
+  function release(): void {
+    cancelRelease = null;
+    lock?.release();
+    lock = null;
+  }
+
   function sync(): void {
-    if (activeCount() > 0 && lock === null) {
-      lock = deps.acquire();
+    if (activeCount() > 0) {
+      cancelRelease?.();
+      cancelRelease = null;
+      if (lock === null) lock = deps.acquire();
       return;
     }
-    if (activeCount() === 0 && lock !== null) {
-      lock.release();
-      lock = null;
+    if (lock !== null && cancelRelease === null) {
+      cancelRelease = schedule(release, deps.graceMs);
     }
   }
 

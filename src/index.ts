@@ -10,6 +10,7 @@ const keepalive = createKeepalive({
   acquire: createCaffeinateAcquirer((level, message) => {
     log(level, message);
   }),
+  graceMs: 30 * 60 * 1000,
 });
 
 export default Plugin.define({

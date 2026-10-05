@@ -8,8 +8,9 @@ While any session execution is running (`session.execution.started` until
 `succeeded`, `failed` or `interrupted`) or an agent's background shell is still
 running, the plugin holds a `caffeinate -i -m -w <opencode pid>` process: the
 system and disk are kept from idle-sleeping, while the display sleeps on its
-normal schedule. Once nothing is running, the process is killed and the
-assertion released.
+normal schedule. Once nothing has been running for 30 minutes, the process is
+killed and the assertion released; new activity within that window keeps the
+existing process and restarts the countdown when it ends.
 
 Background shells count because OpenCode ends the execution as soon as the
 agent's turn ends, even while a shell it started (a long test run, say) keeps
@@ -57,8 +58,8 @@ asserts against real `pmset` output.
 ## Verifying
 
 With an agent running, `pmset -g assertions` should list a `caffeinate` process
-holding `PreventUserIdleSystemSleep` and `PreventDiskIdle`. It disappears once
-all sessions are idle:
+holding `PreventUserIdleSystemSleep` and `PreventDiskIdle`. It disappears 30
+minutes after the last session and agent shell have finished:
 
 ```bash
 pgrep -fl "caffeinate -i -m -w"

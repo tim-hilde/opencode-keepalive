@@ -26,7 +26,10 @@ function assertionHeld(): boolean {
 describe("caffeinate integration", () => {
   test("holds a real power assertion while a session is running", async () => {
     const before = runningCaffeinatePids();
-    const keepalive = createKeepalive({ acquire: createCaffeinateAcquirer(() => {}) });
+    const keepalive = createKeepalive({
+      acquire: createCaffeinateAcquirer(() => {}),
+      graceMs: 0,
+    });
 
     keepalive.handleEvent({ type: "session.execution.started", data: { sessionID: "s1" } });
     await sleep(700);
