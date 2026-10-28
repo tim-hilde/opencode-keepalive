@@ -33,13 +33,19 @@ warning and does nothing.
 
 ## Install
 
-Clone the repo, then reference the directory in `~/.config/opencode/opencode.json`:
+Reference the repository in `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "plugins": ["/absolute/path/to/opencode-keepalive"]
+  "plugins": [
+    "opencode-keepalive@git+https://github.com/tim-hilde/opencode-keepalive.git#v0.1.0"
+  ]
 }
 ```
+
+The npm package `opencode-keepalive` is a different plugin, so use the Git URL
+and not the bare package name. To work on a local clone, reference its absolute
+path instead.
 
 No build step — OpenCode loads the TypeScript source directly.
 
