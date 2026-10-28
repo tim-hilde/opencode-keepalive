@@ -11,6 +11,7 @@ const keepalive = createKeepalive({
     log(level, message);
   }),
   graceMs: 30 * 60 * 1000,
+  reattachWindowMs: 10 * 1000,
 });
 
 export default Plugin.define({
@@ -21,6 +22,7 @@ export default Plugin.define({
       else console.debug(`[opencode-keepalive] ${message}`);
     };
 
+    const detach = keepalive.attach();
     const controller = new AbortController();
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
@@ -30,6 +32,7 @@ export default Plugin.define({
 
     return () => {
       controller.abort();
+      detach();
     };
   },
 });

@@ -7,6 +7,7 @@ export type Schedule = (fn: () => void, ms: number) => () => void;
 export type KeepaliveDeps = {
   acquire: () => WakeLock | null;
   graceMs: number;
+  reattachWindowMs: number;
   schedule?: Schedule;
 };
 
@@ -17,6 +18,7 @@ export type KeepaliveEvent = {
 
 export type Keepalive = {
   handleEvent: (event: KeepaliveEvent) => void;
+  attach: () => () => void;
   isHolding: () => boolean;
   activeCount: () => number;
 };
@@ -53,6 +55,8 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
   const shells = new Set<string>();
   let lock: WakeLock | null = null;
   let cancelRelease: (() => void) | null = null;
+  let attached = 0;
+  let cancelOrphan: (() => void) | null = null;
 
   function activeCount(): number {
     return sessions.size + shells.size;
@@ -74,6 +78,30 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
     if (lock !== null && cancelRelease === null) {
       cancelRelease = schedule(release, deps.graceMs);
     }
+  }
+
+  // Without an attached registration no event stream is left, so running work
+  // could never be seen to end and the lock would last until OpenCode exits.
+  function orphan(): void {
+    cancelOrphan = null;
+    sessions.clear();
+    shells.clear();
+    sync();
+  }
+
+  // OpenCode may unload a registration before it sets up the next one in the
+  // same module, so the state survives a re-attach within the window.
+  function attach(): () => void {
+    attached += 1;
+    cancelOrphan?.();
+    cancelOrphan = null;
+    let detached = false;
+    return () => {
+      if (detached) return;
+      detached = true;
+      attached -= 1;
+      if (attached === 0) cancelOrphan = schedule(orphan, deps.reattachWindowMs);
+    };
   }
 
   function handleEvent(event: KeepaliveEvent): void {
@@ -108,6 +136,7 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
 
   return {
     handleEvent,
+    attach,
     isHolding: () => lock !== null,
     activeCount,
   };

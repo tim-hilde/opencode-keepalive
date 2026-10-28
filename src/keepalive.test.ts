@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createKeepalive } from "./keepalive.ts";
 
 const GRACE = 1000;
+const REATTACH_WINDOW = 100;
 
 function makeHarness(options: { acquireFails?: boolean } = {}) {
   let acquireCount = 0;
@@ -19,6 +20,7 @@ function makeHarness(options: { acquireFails?: boolean } = {}) {
       };
     },
     graceMs: GRACE,
+    reattachWindowMs: REATTACH_WINDOW,
     schedule: (fn, ms) => {
       const timer = { due: now + ms, fn, cancelled: false };
       timers.push(timer);
@@ -211,5 +213,70 @@ describe("createKeepalive", () => {
     const h = makeHarness();
     h.keepalive.handleEvent(shellCreated("sh_1", {}));
     expect(h.counts().acquire).toBe(0);
+  });
+});
+
+describe("attach", () => {
+  test("releases a grace period after the last registration detaches mid-session", () => {
+    const h = makeHarness();
+    const detach = h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    detach();
+    h.advance(REATTACH_WINDOW);
+    h.advance(GRACE - 1);
+    expect(h.keepalive.isHolding()).toBe(true);
+    h.advance(1);
+    expect(h.counts().release).toBe(1);
+    expect(h.keepalive.isHolding()).toBe(false);
+  });
+
+  test("keeps tracking when a registration re-attaches within the window", () => {
+    const h = makeHarness();
+    const detach = h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    detach();
+    h.advance(REATTACH_WINDOW - 1);
+    h.keepalive.attach();
+    h.advance(REATTACH_WINDOW + GRACE);
+    expect(h.counts().release).toBe(0);
+    expect(h.keepalive.activeCount()).toBe(1);
+    h.keepalive.handleEvent(ended("s1"));
+    h.advance(GRACE);
+    expect(h.counts().release).toBe(1);
+  });
+
+  test("keeps the lock while another registration is still attached", () => {
+    const h = makeHarness();
+    const detachFirst = h.keepalive.attach();
+    h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    detachFirst();
+    h.advance(REATTACH_WINDOW + GRACE);
+    expect(h.counts().release).toBe(0);
+    expect(h.keepalive.isHolding()).toBe(true);
+  });
+
+  test("detaching the same registration twice counts once", () => {
+    const h = makeHarness();
+    const detachFirst = h.keepalive.attach();
+    h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    detachFirst();
+    detachFirst();
+    h.advance(REATTACH_WINDOW + GRACE);
+    expect(h.keepalive.isHolding()).toBe(true);
+  });
+
+  test("forgets work that was running when the last registration detached", () => {
+    const h = makeHarness();
+    const detach = h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    h.keepalive.handleEvent(shellCreated("sh_1"));
+    detach();
+    h.advance(REATTACH_WINDOW);
+    h.advance(GRACE);
+    h.keepalive.attach();
+    expect(h.keepalive.activeCount()).toBe(0);
+    expect(h.keepalive.isHolding()).toBe(false);
   });
 });

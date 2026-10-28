@@ -21,6 +21,13 @@ The `-w <pid>` flag makes `caffeinate` watch the OpenCode process, so the
 assertion is released even if OpenCode is force-killed and no cleanup handler
 gets to run.
 
+OpenCode unloads the plugin after a plugin update or a configuration change.
+The unloaded copy no longer receives events, so it cannot see the running work
+end. If OpenCode does not load the same plugin code again within 10 seconds,
+the unloaded copy forgets the running work. It then releases its wake lock
+after the normal 30-minute wait. A new copy of the plugin takes over with its
+own wake lock on the next activity.
+
 No cross-process coordination is needed: macOS power assertions from separate
 processes stack, so several concurrent OpenCode instances each hold their own
 and the machine stays awake until the last one finishes. That makes the lock
@@ -38,7 +45,7 @@ Reference the repository in `~/.config/opencode/opencode.json`:
 ```json
 {
   "plugins": [
-    "opencode-keepalive@git+https://github.com/tim-hilde/opencode-keepalive.git#v0.1.0"
+    "opencode-keepalive@git+https://github.com/tim-hilde/opencode-keepalive.git#v0.1.1"
   ]
 }
 ```

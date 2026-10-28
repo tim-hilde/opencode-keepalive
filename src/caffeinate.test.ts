@@ -29,6 +29,7 @@ describe("caffeinate integration", () => {
     const keepalive = createKeepalive({
       acquire: createCaffeinateAcquirer(() => {}),
       graceMs: 0,
+      reattachWindowMs: 0,
     });
 
     keepalive.handleEvent({ type: "session.execution.started", data: { sessionID: "s1" } });

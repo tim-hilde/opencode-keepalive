@@ -1,6 +1,6 @@
 {
   "name": "opencode-keepalive",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenCode plugin that keeps macOS awake while an agent session is running",
   "keywords": [
     "opencode",
