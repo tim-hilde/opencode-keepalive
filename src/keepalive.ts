@@ -8,7 +8,8 @@ export type KeepaliveSnapshot = { sessions: string[]; shells: string[] };
 
 // A plugin update loads a new copy of this module from a new path. The registry
 // lets that copy adopt the work an older copy is tracking, so its shape must
-// stay compatible across releases.
+// stay compatible across releases. Each copy captures the registry object at
+// load, so later releases must mutate it and never replace it.
 export type KeepaliveRegistry = { latest?: { snapshot: () => KeepaliveSnapshot } };
 
 export type KeepaliveDeps = {
@@ -65,6 +66,7 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
   let cancelRelease: (() => void) | null = null;
   let attached = 0;
   let cancelOrphan: (() => void) | null = null;
+  let adopted = false;
 
   function activeCount(): number {
     return sessions.size + shells.size;
@@ -101,17 +103,32 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
     snapshot: (): KeepaliveSnapshot => ({ sessions: [...sessions], shells: [...shells] }),
   };
 
-  function adopt(work: KeepaliveSnapshot): void {
-    for (const id of work.sessions) sessions.add(id);
-    for (const id of work.shells) shells.add(id);
+  function adoptIds(target: Set<string>, ids: unknown): void {
+    if (!Array.isArray(ids)) return;
+    for (const id of ids) if (typeof id === "string") target.add(id);
+  }
+
+  // The snapshot comes from another release, so a failure must not break setup.
+  // A copy that was attached before trusts its own state over a stale snapshot.
+  function adoptPrevious(): void {
+    if (adopted) return;
+    adopted = true;
+    const previous = deps.registry?.latest;
+    if (previous === undefined || previous === handle) return;
+    try {
+      const work: unknown = previous.snapshot();
+      adoptIds(sessions, field(work, "sessions"));
+      adoptIds(shells, field(work, "shells"));
+    } catch {
+      return;
+    }
     sync();
   }
 
   // OpenCode closes a reloaded plugin's old registration before it sets up the
   // new one, so the state survives a re-attach within the window.
   function attach(): () => void {
-    const previous = deps.registry?.latest;
-    if (previous !== undefined && previous !== handle) adopt(previous.snapshot());
+    adoptPrevious();
     if (deps.registry !== undefined) deps.registry.latest = handle;
     attached += 1;
     cancelOrphan?.();

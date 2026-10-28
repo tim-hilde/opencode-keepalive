@@ -8,8 +8,8 @@ const globals = globalThis as unknown as Record<symbol, KeepaliveRegistry | unde
 const registryKey = Symbol.for("opencode-keepalive.registry");
 const registry = (globals[registryKey] ??= {});
 
-// Module scope: if OpenCode registers this plugin more than once, all
-// registrations share one state machine and one caffeinate process.
+// Module scope: registrations that load the same copy of this module share one
+// state machine and one caffeinate process.
 const keepalive = createKeepalive({
   acquire: createCaffeinateAcquirer((level, message) => {
     log(level, message);

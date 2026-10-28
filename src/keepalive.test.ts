@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createKeepalive, type KeepaliveRegistry } from "./keepalive.ts";
+import { createKeepalive, type KeepaliveRegistry, type KeepaliveSnapshot } from "./keepalive.ts";
 
 const GRACE = 1000;
 const REATTACH_WINDOW = 100;
@@ -320,6 +320,69 @@ describe("takeover", () => {
     next.advance(GRACE);
     expect(next.counts().release).toBe(1);
     expect(next.keepalive.isHolding()).toBe(false);
+  });
+
+  test("adopts the work as it stood when the previous copy closed", () => {
+    const registry: KeepaliveRegistry = {};
+    const previous = makeHarness({ registry });
+    const detachPrevious = previous.keepalive.attach();
+    previous.keepalive.handleEvent(started("s1"));
+    const next = makeHarness({ registry });
+    previous.keepalive.handleEvent(started("s2"));
+    detachPrevious();
+    next.keepalive.attach();
+    expect(next.keepalive.activeCount()).toBe(2);
+  });
+
+  test("each new copy adopts from the most recent one", () => {
+    const registry: KeepaliveRegistry = {};
+    const first = makeHarness({ registry });
+    const detachFirst = first.keepalive.attach();
+    first.keepalive.handleEvent(started("s1"));
+    detachFirst();
+    const second = makeHarness({ registry });
+    const detachSecond = second.keepalive.attach();
+    second.keepalive.handleEvent(started("s2"));
+    detachSecond();
+    const third = makeHarness({ registry });
+    third.keepalive.attach();
+    expect(third.keepalive.activeCount()).toBe(2);
+  });
+
+  test("a copy that was attached before keeps its own state on re-attach", () => {
+    const registry: KeepaliveRegistry = {};
+    const y = makeHarness({ registry });
+    const detachY = y.keepalive.attach();
+    const x = makeHarness({ registry });
+    const detachX = x.keepalive.attach();
+    x.keepalive.handleEvent(started("s1"));
+    y.keepalive.handleEvent(started("s1"));
+    detachX();
+    y.keepalive.handleEvent(ended("s1"));
+    detachY();
+    y.keepalive.attach();
+    expect(y.keepalive.activeCount()).toBe(0);
+  });
+
+  test("starts empty when the previous copy's snapshot throws", () => {
+    const registry: KeepaliveRegistry = {
+      latest: {
+        snapshot: () => {
+          throw new Error("incompatible");
+        },
+      },
+    };
+    const next = makeHarness({ registry });
+    expect(() => next.keepalive.attach()).not.toThrow();
+    expect(next.keepalive.activeCount()).toBe(0);
+  });
+
+  test("adopts only string ids from a malformed snapshot", () => {
+    const malformed = { sessions: ["s1", 42], shells: "sh_1" } as unknown as KeepaliveSnapshot;
+    const registry: KeepaliveRegistry = { latest: { snapshot: () => malformed } };
+    const next = makeHarness({ registry });
+    next.keepalive.attach();
+    expect(next.keepalive.activeCount()).toBe(1);
   });
 
   test("adopts nothing from a previous copy that already forgot its work", () => {

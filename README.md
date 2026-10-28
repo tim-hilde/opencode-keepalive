@@ -23,10 +23,12 @@ gets to run.
 
 OpenCode unloads the plugin after a plugin update or a configuration change.
 The unloaded copy no longer receives events, so it cannot see the running work
-end. When the next copy of the plugin starts, it adopts the sessions and shells
-that the previous copy was tracking and takes its own wake lock. If OpenCode
-does not register the unloaded copy again within 5 minutes, that copy forgets
-its work and releases its wake lock after the normal 30-minute wait.
+end. If OpenCode does not register the unloaded copy again within 5 minutes,
+that copy forgets its work and releases its wake lock after the normal 30-minute
+wait. When a new copy of the plugin starts within those 5 minutes, it adopts the
+sessions and shells that the previous copy was tracking and takes its own wake
+lock. Version 0.1.0 cannot hand over its work, so the first update from 0.1.0
+during a running session keeps the old wake lock until OpenCode exits.
 
 Events that arrive while no copy is subscribed are lost. If a session ends in
 that short gap, the wake lock stays until OpenCode exits.
