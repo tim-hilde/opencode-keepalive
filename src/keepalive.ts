@@ -4,10 +4,18 @@ export type WakeLock = {
 
 export type Schedule = (fn: () => void, ms: number) => () => void;
 
+export type KeepaliveSnapshot = { sessions: string[]; shells: string[] };
+
+// A plugin update loads a new copy of this module from a new path. The registry
+// lets that copy adopt the work an older copy is tracking, so its shape must
+// stay compatible across releases.
+export type KeepaliveRegistry = { latest?: { snapshot: () => KeepaliveSnapshot } };
+
 export type KeepaliveDeps = {
   acquire: () => WakeLock | null;
   graceMs: number;
   reattachWindowMs: number;
+  registry?: KeepaliveRegistry;
   schedule?: Schedule;
 };
 
@@ -89,9 +97,22 @@ export function createKeepalive(deps: KeepaliveDeps): Keepalive {
     sync();
   }
 
-  // OpenCode may unload a registration before it sets up the next one in the
-  // same module, so the state survives a re-attach within the window.
+  const handle = {
+    snapshot: (): KeepaliveSnapshot => ({ sessions: [...sessions], shells: [...shells] }),
+  };
+
+  function adopt(work: KeepaliveSnapshot): void {
+    for (const id of work.sessions) sessions.add(id);
+    for (const id of work.shells) shells.add(id);
+    sync();
+  }
+
+  // OpenCode closes a reloaded plugin's old registration before it sets up the
+  // new one, so the state survives a re-attach within the window.
   function attach(): () => void {
+    const previous = deps.registry?.latest;
+    if (previous !== undefined && previous !== handle) adopt(previous.snapshot());
+    if (deps.registry !== undefined) deps.registry.latest = handle;
     attached += 1;
     cancelOrphan?.();
     cancelOrphan = null;

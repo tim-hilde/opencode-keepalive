@@ -23,10 +23,13 @@ gets to run.
 
 OpenCode unloads the plugin after a plugin update or a configuration change.
 The unloaded copy no longer receives events, so it cannot see the running work
-end. If OpenCode does not load the same plugin code again within 10 seconds,
-the unloaded copy forgets the running work. It then releases its wake lock
-after the normal 30-minute wait. A new copy of the plugin takes over with its
-own wake lock on the next activity.
+end. When the next copy of the plugin starts, it adopts the sessions and shells
+that the previous copy was tracking and takes its own wake lock. If OpenCode
+does not register the unloaded copy again within 5 minutes, that copy forgets
+its work and releases its wake lock after the normal 30-minute wait.
+
+Events that arrive while no copy is subscribed are lost. If a session ends in
+that short gap, the wake lock stays until OpenCode exits.
 
 No cross-process coordination is needed: macOS power assertions from separate
 processes stack, so several concurrent OpenCode instances each hold their own

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createKeepalive } from "./keepalive.ts";
+import { createKeepalive, type KeepaliveRegistry } from "./keepalive.ts";
 
 const GRACE = 1000;
 const REATTACH_WINDOW = 100;
 
-function makeHarness(options: { acquireFails?: boolean } = {}) {
+function makeHarness(options: { acquireFails?: boolean; registry?: KeepaliveRegistry } = {}) {
   let acquireCount = 0;
   let releaseCount = 0;
   let now = 0;
@@ -21,6 +21,7 @@ function makeHarness(options: { acquireFails?: boolean } = {}) {
     },
     graceMs: GRACE,
     reattachWindowMs: REATTACH_WINDOW,
+    registry: options.registry,
     schedule: (fn, ms) => {
       const timer = { due: now + ms, fn, cancelled: false };
       timers.push(timer);
@@ -278,5 +279,59 @@ describe("attach", () => {
     h.keepalive.attach();
     expect(h.keepalive.activeCount()).toBe(0);
     expect(h.keepalive.isHolding()).toBe(false);
+  });
+
+  test("reuses the held lock when work starts during the grace period after forgetting", () => {
+    const h = makeHarness();
+    const detach = h.keepalive.attach();
+    h.keepalive.handleEvent(started("s1"));
+    detach();
+    h.advance(REATTACH_WINDOW);
+    h.keepalive.attach();
+    h.keepalive.handleEvent(started("s2"));
+    h.advance(GRACE);
+    expect(h.counts().acquire).toBe(1);
+    expect(h.counts().release).toBe(0);
+  });
+});
+
+describe("takeover", () => {
+  test("a new copy adopts the work a previous copy was tracking", () => {
+    const registry: KeepaliveRegistry = {};
+    const previous = makeHarness({ registry });
+    const detachPrevious = previous.keepalive.attach();
+    previous.keepalive.handleEvent(started("s1"));
+    previous.keepalive.handleEvent(shellCreated("sh_1"));
+    detachPrevious();
+    const next = makeHarness({ registry });
+    next.keepalive.attach();
+    expect(next.keepalive.activeCount()).toBe(2);
+    expect(next.keepalive.isHolding()).toBe(true);
+  });
+
+  test("adopted work ends through the new copy's events", () => {
+    const registry: KeepaliveRegistry = {};
+    const previous = makeHarness({ registry });
+    previous.keepalive.attach();
+    previous.keepalive.handleEvent(started("s1"));
+    const next = makeHarness({ registry });
+    next.keepalive.attach();
+    next.keepalive.handleEvent(ended("s1"));
+    next.advance(GRACE);
+    expect(next.counts().release).toBe(1);
+    expect(next.keepalive.isHolding()).toBe(false);
+  });
+
+  test("adopts nothing from a previous copy that already forgot its work", () => {
+    const registry: KeepaliveRegistry = {};
+    const previous = makeHarness({ registry });
+    const detachPrevious = previous.keepalive.attach();
+    previous.keepalive.handleEvent(started("s1"));
+    detachPrevious();
+    previous.advance(REATTACH_WINDOW);
+    const next = makeHarness({ registry });
+    next.keepalive.attach();
+    expect(next.keepalive.activeCount()).toBe(0);
+    expect(next.counts().acquire).toBe(0);
   });
 });
